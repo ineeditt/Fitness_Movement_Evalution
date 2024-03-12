@@ -3,7 +3,6 @@ import cv2
 import tflite_runtime.interpreter as tflite
 from PIL import Image, ImageFont, ImageDraw
 
-
 def paint_chinese_opencv(im, chinese, pos, color):
     img_PIL = Image.fromarray(cv2.cvtColor(im, cv2.COLOR_BGR2RGB))
     font = ImageFont.truetype('NotoSansCJK-Bold.ttc', 25, encoding="utf-8")
@@ -13,10 +12,8 @@ def paint_chinese_opencv(im, chinese, pos, color):
     # chinese = chinese.decode('utf-8')
     draw = ImageDraw.Draw(img_PIL)
     draw.text(position, chinese, fillColor, font)
-
     img = cv2.cvtColor(np.asarray(img_PIL), cv2.COLOR_RGB2BGR)
     return img
-
 
 def get_angle(v1, v2):
     angle = np.dot(v1, v2) / (np.sqrt(np.sum(v1 * v1)) * np.sqrt(np.sum(v2 * v2)))
@@ -27,8 +24,61 @@ def get_angle(v1, v2):
         angle = - angle
     return angle
 
+def train_counter(keypoints, type):
+    global flag
+    keypoints = np.array(keypoints)
+    Counter = 0
+    v1 = keypoints[5] - keypoints[6]
+    v2 = keypoints[8] - keypoints[6]
+    angle_right_arm = get_angle(v1, v2)
 
+    # 计算左臂与水平方向的夹角
+    v1 = keypoints[7] - keypoints[5]
+    v2 = keypoints[6] - keypoints[5]
+    angle_left_arm = get_angle(v1, v2)
 
+    # 计算左肘的夹角
+    v1 = keypoints[6] - keypoints[8]
+    v2 = keypoints[10] - keypoints[8]
+    angle_right_elbow = get_angle(v1, v2)
+
+    # 计算右肘的夹角
+    v1 = keypoints[5] - keypoints[7]
+    v2 = keypoints[9] - keypoints[7]
+    angle_left_elbow = get_angle(v1, v2)
+
+    #计算左大腿和左臂夹角
+    v1 = keypoints[13] - keypoints[11]
+    v2 = keypoints[7] - keypoints[5]
+    angle_left_leg = get_angle(v1, v2)
+
+    #计算右大腿和右臂夹角
+    v1 = keypoints[14] - keypoints[12]
+    v2 = keypoints[8] - keypoints[6]
+    angle_right_leg = get_angle(v1, v2)
+
+    #推肩条件
+    shoulder_push_begin= (angle_right_leg>-90 and angle_left_leg<90)
+    shoulder_push_finish = (angle_right_leg<-150 and angle_left_leg>150)
+    #飞鸟条件
+    flying_bird_begin = (angle_right_leg>-30 and angle_left_leg<30)
+    flying_bird_finish = (angle_right_leg<-60 and angle_left_leg>60)
+
+    if(type == "Shoulder_Push"):
+        if( shoulder_push_begin):
+            flag = 1
+        elif( shoulder_push_finish and flag):
+            Counter = 1
+            flag = 0
+    elif(type == "Flying_Bird"):
+        if(flying_bird_begin):
+            flag = 1
+        elif(flying_bird_finish and flag):
+            Counter  = 1
+            flag = 0
+
+    print(flag, Counter,shoulder_push_finish)
+    return Counter
 def get_pos(keypoints):
     # 计算右臂与水平方向的夹角
     keypoints = np.array(keypoints)
@@ -70,6 +120,7 @@ def get_pos(keypoints):
 
 
 if __name__ == "__main__":
+
     # 检测模型
     file_model = "posenet_mobilenet_v1_100_257x257_multi_kpt_stripped.tflite"
 
@@ -90,9 +141,10 @@ if __name__ == "__main__":
     frame_rate_calc = 1
     freq = cv2.getTickFrequency()
 
-    video = "body.mp4"
+    video = "flying_bird.mp4"
     # 打开摄像头
     cap = cv2.VideoCapture(video)
+    counter = 0
     while True:
 
         # 获取起始时间
@@ -106,7 +158,8 @@ if __name__ == "__main__":
         imH, imW, _ = np.shape(img)
 
         # 适当缩放
-        img = cv2.resize(img, (int(imW * 0.5), int(imH * 0.5)))
+        img = cv2.resize(img, (int(imW * 0.9), int(imH * 0.9)))
+
 
         # 获取图像帧的尺寸
         imH, imW, _ = np.shape(img)
@@ -172,6 +225,8 @@ if __name__ == "__main__":
         # 取平均得到最终的置信度
         score = score / n_KeyPoints
 
+        type = "Flying_Bird"
+        str_pos = " "
         if score > 0.5:
             # 标记关键点
             for point in keypoints:
@@ -190,15 +245,18 @@ if __name__ == "__main__":
             cv2.polylines(img, [np.array([keypoints[5], keypoints[6], keypoints[12], keypoints[11], keypoints[5]])],
                           False, (255, 255, 0), 3)
 
-            # 计算位置角
+             # 计算位置角
             str_pos = get_pos(keypoints)
+            counter += train_counter(keypoints, type)
 
+        # 显示计数
+        cv2.putText(img, 'Counter: %d ' % counter, (imW - 330, imH - 20),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2, cv2.LINE_AA)
         # 显示动作识别结果
-
         img = paint_chinese_opencv(img, str_pos, (0, 5), (255, 0, 0))
 
         # 显示帧率
-        cv2.putText(img, 'FPS: %.2f score:%.2f' % (frame_rate_calc, score), (imW - 350, imH - 20),
+        cv2.putText(img, 'FPS: %.2f score:%.2f' % (frame_rate_calc, score), (imW - 350, imH - 50),
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2, cv2.LINE_AA)
 
         # 显示结果
