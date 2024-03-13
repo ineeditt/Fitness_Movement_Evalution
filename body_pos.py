@@ -37,12 +37,12 @@ def train_counter(keypoints, type):
     v2 = keypoints[6] - keypoints[5]
     angle_left_arm = get_angle(v1, v2)
 
-    # 计算左肘的夹角
+    # 计算右肘的夹角
     v1 = keypoints[6] - keypoints[8]
     v2 = keypoints[10] - keypoints[8]
     angle_right_elbow = get_angle(v1, v2)
 
-    # 计算右肘的夹角
+    # 计算左肘的夹角
     v1 = keypoints[5] - keypoints[7]
     v2 = keypoints[9] - keypoints[7]
     angle_left_elbow = get_angle(v1, v2)
@@ -57,12 +57,23 @@ def train_counter(keypoints, type):
     v2 = keypoints[8] - keypoints[6]
     angle_right_leg = get_angle(v1, v2)
 
+    #计算左大腿和左小腿夹角
+    v1 = keypoints[11] - keypoints[13]
+    v2 = keypoints[15] - keypoints[13]
+    angle_left_knee = get_angle(v1, v2)
+
     #推肩条件
     shoulder_push_begin= (angle_right_leg>-90 and angle_left_leg<90)
     shoulder_push_finish = (angle_right_leg<-150 and angle_left_leg>150)
     #飞鸟条件
     flying_bird_begin = (angle_right_leg>-30 and angle_left_leg<30)
     flying_bird_finish = (angle_right_leg<-60 and angle_left_leg>60)
+    #深蹲条件
+    squat_begin = (angle_left_knee<-120 or angle_left_knee>0)
+    squat_finish = (angle_left_knee>-70 and angle_left_knee<0)
+    #二头弯举条件
+    bend_begin = (angle_left_elbow<180 and angle_left_elbow>150)
+    bend_finish = (angle_left_elbow<45 and angle_left_elbow>0)
 
     if(type == "Shoulder_Push"):
         if( shoulder_push_begin):
@@ -76,48 +87,19 @@ def train_counter(keypoints, type):
         elif(flying_bird_finish and flag):
             Counter  = 1
             flag = 0
-
-    print(flag, Counter,shoulder_push_finish)
+    elif(type == "Squat"):
+        if(squat_begin):
+            flag = 1
+        elif(squat_finish and flag):
+            Counter = 1
+            flag = 0
+    elif(type == "Bend"):
+        if(bend_begin):
+            flag = 1
+        elif(bend_finish):
+            Counter = 1
+            flag = 0
     return Counter
-def get_pos(keypoints):
-    # 计算右臂与水平方向的夹角
-    keypoints = np.array(keypoints)
-    v1 = keypoints[5] - keypoints[6]
-    v2 = keypoints[8] - keypoints[6]
-    angle_right_arm = get_angle(v1, v2)
-
-    # 计算左臂与水平方向的夹角
-    v1 = keypoints[7] - keypoints[5]
-    v2 = keypoints[6] - keypoints[5]
-    angle_left_arm = get_angle(v1, v2)
-
-    # 计算左肘的夹角
-    v1 = keypoints[6] - keypoints[8]
-    v2 = keypoints[10] - keypoints[8]
-    angle_right_elbow = get_angle(v1, v2)
-
-    # 计算右肘的夹角
-    v1 = keypoints[5] - keypoints[7]
-    v2 = keypoints[9] - keypoints[7]
-    angle_left_elbow = get_angle(v1, v2)
-
-    str_pos = ""
-    # 设计动作识别规则
-    if angle_right_arm < 0 and angle_left_arm < 0:
-        str_pos = "正常"
-        if abs(angle_left_elbow) < 120 and abs(angle_right_elbow) < 120:
-            str_pos = "叉腰"
-    elif angle_right_arm < 0 and angle_left_arm > 0:
-        str_pos = "抬左手"
-    elif angle_right_arm > 0 and angle_left_arm < 0:
-        str_pos = "抬右手"
-    elif angle_right_arm > 0 and angle_left_arm > 0:
-        str_pos = "抬双手"
-        if abs(angle_left_elbow) < 120 and abs(angle_right_elbow) < 120:
-            str_pos = "三角形"
-
-    return str_pos
-
 
 if __name__ == "__main__":
 
@@ -141,7 +123,7 @@ if __name__ == "__main__":
     frame_rate_calc = 1
     freq = cv2.getTickFrequency()
 
-    video = "flying_bird.mp4"
+    video = "squat.mp4"
     # 打开摄像头
     cap = cv2.VideoCapture(video)
     counter = 0
@@ -158,7 +140,7 @@ if __name__ == "__main__":
         imH, imW, _ = np.shape(img)
 
         # 适当缩放
-        img = cv2.resize(img, (int(imW * 0.9), int(imH * 0.9)))
+        img = cv2.resize(img, (int(imW * 0.8), int(imH * 0.8)))
 
 
         # 获取图像帧的尺寸
@@ -225,7 +207,7 @@ if __name__ == "__main__":
         # 取平均得到最终的置信度
         score = score / n_KeyPoints
 
-        type = "Flying_Bird"
+        type = "Squat"
         str_pos = " "
         if score > 0.5:
             # 标记关键点
@@ -245,15 +227,13 @@ if __name__ == "__main__":
             cv2.polylines(img, [np.array([keypoints[5], keypoints[6], keypoints[12], keypoints[11], keypoints[5]])],
                           False, (255, 255, 0), 3)
 
-             # 计算位置角
-            str_pos = get_pos(keypoints)
+            #更新计数器
             counter += train_counter(keypoints, type)
 
         # 显示计数
-        cv2.putText(img, 'Counter: %d ' % counter, (imW - 330, imH - 20),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2, cv2.LINE_AA)
-        # 显示动作识别结果
-        img = paint_chinese_opencv(img, str_pos, (0, 5), (255, 0, 0))
+        cv2.putText(img, 'Counter: %d ' % counter, (imW - 350, imH - 20),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
+
 
         # 显示帧率
         cv2.putText(img, 'FPS: %.2f score:%.2f' % (frame_rate_calc, score), (imW - 350, imH - 50),
