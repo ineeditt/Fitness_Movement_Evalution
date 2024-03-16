@@ -5,3 +5,7 @@
 
 ## GUI界面
 通过QtDesigner来绘制UI界面，在UI_logic文件中设计UI界面中的槽函数使按键具有对应功能
+
+## 文件说明
+GUI文件夹中存放QtDesigner的ui文件；video文件夹存放不同健身动作的视频；\
+python文件：Counter.py包含健身动作的评分标准以及计数逻辑； GUI.py为QtDesigner设计的ui文件转成的.py文件； UI_logic.py为GUI界面的控件所对应的槽函数和逻辑以及对视频进行姿态识别的处理
