@@ -86,3 +86,27 @@ def train_counter(keypoints, type):
             flag = 0
 
     return Counter
+
+#基于TOPSIS优劣解距离的综合评价法
+def get_score(keypoints, type):
+    global flag
+    w = [0.22, 0.21, 0.43, 0.14]
+    counter1 = counter2 = counter3 = counter4 = 0
+
+    # 直接调用train_counter获取计数
+    if type == "Shoulder_Push":
+        counter1 += train_counter(keypoints, type)
+    elif type == "Flying_Bird":
+        counter2 += train_counter(keypoints, type)
+    elif type == "Squat":
+        counter3 += train_counter(keypoints, type)
+    elif type == "Bend":
+        counter4 += train_counter(keypoints, type)
+    
+    # 计算small和big
+    small = math.sqrt(sum(w[i] * ((counter - 5) ** 2) for i, counter in enumerate([counter1, counter2, counter3, counter4])))
+    big = math.sqrt(sum(w[i] * ((20 - counter) ** 2) for i, counter in enumerate([counter1, counter2, counter3, counter4])))
+
+    s = small / (small + big)
+    score = 100 * s
+    return score
